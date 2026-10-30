@@ -1,3 +1,12 @@
+import threading, os
+from flask import Flask
+app = Flask(__name__)
+@app.route('/')
+def home():
+    return "Nextra Gold Bot Running"
+def run_flask():
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
+threading.Thread(target=run_flask, daemon=True).start()
 import requests, time, yfinance as yf, random
 BOT_TOKEN = "8929751892:AAFCXJqvt7iAWbXOvzds3BfugV4pBSqcQuw"
 CHANNEL_ID = -1004445737129
