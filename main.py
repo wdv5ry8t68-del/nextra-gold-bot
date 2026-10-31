@@ -1,44 +1,24 @@
-import threading, os, datetime
+import os, datetime, threading, time, requests
+import yfinance as yf
 from flask import Flask
+
 app = Flask(__name__)
-
-@app.route('/')
-def home():
-    sym, name = get_symbol_name()
-    return f"Nextra Bot Running - Today: {name} ({sym})"
-
-def run_flask():
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
-
-threading.Thread(target=run_flask, daemon=True).start()
-
-import requests, time, yfinance as yf, random
-
-BOT_TOKEN = os.environ.get("BOT_TOKEN", "8929751892:AAFCXJqvt7iAWbXOvzds3BfugV4pBSqcQuw")
-CHANNEL_ID = -1004445737129
 
 # === المنطق الجديد: ذهب بالاسبوع - بيتكوين بالويكند ===
 def get_symbol_name():
     weekday = datetime.datetime.utcnow().weekday()
-    if weekday in [5, 6]:  # السبت =5 الأحد=6
+    if weekday in [5, 6]:  # السبت=5 الأحد=6
         return "BTC-USD", "BITCOIN ₿"
     else:
-        return "XAUUSD", "GOLD 🟡"
+        return "GC=F", "GOLD 🟡"
 
-def get_data(p="2d", i="15m"):
-    symbol, asset_name = get_symbol_name()
-    try:
-        if "BTC" in symbol:
-            # بيتكوين شغال 24/7
-            d = yf.download("BTC-USD", period=p, interval=i, progress=False)
-        else:
-            # ذهب - جرب GC=F أول وبعدين XAUUSD
-            d = yf.download("GC=F", period=p, interval=i, progress=False)
-            if d.empty:
-                d = yf.download("XAUUSD=X", period=p, interval=i, progress=False)
-        return d
-    except:
-        return None
+@app.route('/')
+def home():
+    sym, name = get_symbol_name()
+    return f"Nextra Bot Running - Today: {name} ({sym}) - {datetime.datetime.utcnow()}"
+
+BOT_TOKEN = os.environ.get("BOT_TOKEN", "8929751892:AAFCXJqvt7iAWbXOvzds3BfugV4pBSqcQuw") # تأكد من التوكن ب Environment
+CHANNEL_ID = -1004445737129
 
 def rsi(s, period=14):
     delta=s.diff(); gain=delta.where(delta>0,0); loss=-delta.where(delta<0,0)
@@ -47,30 +27,24 @@ def rsi(s, period=14):
     return 100-(100/(1+rs))
 
 def analyze():
-    df15=get_data("2d","15m"); df1h=get_data("7d","1h")
-    if df15 is None or df15.empty or df1h is None or df1h.empty:
-        return None
+    symbol, asset_name = get_symbol_name()
     try:
-        # تبسيط: نفس منطقك القديم بس مع الاسم الجديد
-        c15=df15['Close']; c1h=df1h['Close']
-        if isinstance(c15, type(df15)): c15=c15.iloc[:,0]
-        if isinstance(c1h, type(df1h)): c1h=c1h.iloc[:,0]
+        df = yf.download(symbol, period="2d", interval="15m", progress=False)
+        if df.empty: return None
+        c = df['Close']
+        if hasattr(c, 'iloc') and c.ndim > 1: c = c.iloc[:,0]
         
-        e50_15=c15.ewm(span=50).mean().iloc[-1]
-        e200_15=c15.ewm(span=200).mean().iloc[-1]
-        rsi15=rsi(c15).iloc[-1]
-        
-        price=c15.iloc[-1]
-        symbol, asset_name = get_symbol_name()
+        e50 = c.ewm(span=50).mean().iloc[-1]
+        e200 = c.ewm(span=200).mean().iloc[-1]
+        r = rsi(c).iloc[-1]
+        price = c.iloc[-1]
 
         sig=None
-        if price > e50_15 and e50_15 > e200_15 and rsi15 > 50 and rsi15 < 75:
-            sig="BUY"
-        elif price < e50_15 and e50_15 < e200_15 and rsi15 < 50 and rsi15 > 25:
-            sig="SELL"
-
+        if price > e50 and e50 > e200 and 50 < r < 75: sig="BUY"
+        elif price < e50 and e50 < e200 and 25 < r < 50: sig="SELL"
+        
         if sig:
-            return {"symbol":symbol, "asset":asset_name, "price":price, "signal":sig, "rsi":rsi15}
+            return {"symbol":symbol, "asset":asset_name, "price":price, "signal":sig, "rsi":r}
         return None
     except Exception as e:
         print(f"Analyze error: {e}")
@@ -79,26 +53,20 @@ def analyze():
 def send_telegram(msg):
     try:
         url=f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-        requests.post(url, json={"chat_id":CHANNEL_ID, "text":msg, "parse_mode":"HTML"})
-    except Exception as e:
-        print(e)
+        requests.post(url, json={"chat_id":CHANNEL_ID, "text":msg, "parse_mode":"HTML"}, timeout=10)
+    except: pass
 
-# Loop رئيسي
 def main_loop():
     while True:
         res=analyze()
         if res:
-            txt = f"""
-🚀 <b>{res['asset']} SIGNAL - {res['signal']}</b>
-
-Symbol: {res['symbol']}
-Price: {res['price']:.2f}
-RSI: {res['rsi']:.1f}
-Time: {datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}
-
-Entry: {res['price']:.2f}
-"""
+            txt = f"🚀 <b>{res['asset']} SIGNAL - {res['signal']}</b>\n\nSymbol: {res['symbol']}\nPrice: {res['price']:.2f}\nRSI: {res['rsi']:.1f}\nTime: {datetime.datetime.utcnow().strftime('%H:%M UTC')}"
             send_telegram(txt)
-        time.sleep(3600)  # كل ساعة
+        time.sleep(3600)
 
+# شغل اللوب بالخلفية
 threading.Thread(target=main_loop, daemon=True).start()
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)
