@@ -70,3 +70,51 @@ threading.Thread(target=main_loop, daemon=True).start()
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
+@app.route('/calc')
+def calc():
+    return """
+<!DOCTYPE html>
+<html dir="rtl">
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NEXTRA Risk Calculator</title>
+<style>
+body{background:#0f0f0f;color:white;font-family:Arial;padding:20px;direction:rtl}
+.box{background:#1a1a1a;padding:20px;border-radius:15px;max-width:400px;margin:auto}
+input{width:100%;padding:12px;margin:8px 0;border-radius:10px;border:none;background:#2a2a2a;color:white;font-size:16px}
+button{width:100%;padding:14px;background:#00ff88;border:none;border-radius:10px;font-size:18px;font-weight:bold;margin-top:10px}
+.result{background:#222;padding:15px;border-radius:10px;margin-top:15px;line-height:1.8}
+span{color:#00ff88;font-weight:bold}
+</style>
+</head>
+<body>
+<div class="box">
+<h2>📊 NEXTRA | حاسبة المخاطرة</h2>
+<input id="entry" type="number" placeholder="سعر الدخول مثلا 3873">
+<input id="sl" type="number" placeholder="وقف الخسارة مثلا 3869">
+<input id="tp" type="number" placeholder="الهدف مثلا 3887">
+<input id="balance" type="number" placeholder="رصيدك $ مثلا 1000">
+<button onclick="calcRR()">احسب 🔥</button>
+<div id="res" class="result" style="display:none"></div>
+</div>
+<script>
+function calcRR(){
+ let e=parseFloat(entry.value), s=parseFloat(sl.value), t=parseFloat(tp.value), b=parseFloat(balance.value)||1000;
+ if(!e||!s||!t){alert("عبي كل الخانات");return}
+ let risk=Math.abs(e-s);
+ let reward=Math.abs(t-e);
+ let rr=(reward/risk).toFixed(2);
+ let riskMoney=(b*0.01).toFixed(2);
+ document.getElementById('res').style.display='block';
+ document.getElementById('res').innerHTML=`
+ ✅ المخاطرة: <span>${risk.toFixed(2)} $</span><br>
+ ✅ الربح: <span>${reward.toFixed(2)} $</span><br>
+ 📈 Risk/Reward: <span>1 : ${rr}</span><br>
+ 💰 لو راس مالك ${b}$ وبتخاطر 1% = <span>${riskMoney}$</span><br>
+ ${rr>=2?'🔥 صفقة ممتازة!': rr>=1.5?'⚠️ مقبولة':'❌ لا تدخل - RR ضعيف'}
+ `;
+}
+</script>
+</body>
+</html>
+    """
